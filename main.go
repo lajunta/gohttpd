@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 )
 
 var (
@@ -19,7 +20,8 @@ func init() {
 }
 
 func main() {
-	http.Handle("/", http.FileServer(http.Dir(dir)))
+	fs := http.FileServer(http.Dir(dir))
+	http.Handle("/", EncodeHandler(fs))
 	lip := GetOutboundIP()
 	log.Printf("Serving %s on HTTP %s:%s\n", dir, lip, port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -33,4 +35,14 @@ func GetOutboundIP() net.IP {
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 	return localAddr.IP
+}
+
+func EncodeHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		re, _ := regexp.Compile("[.](gz)$")
+		if re.MatchString(r.URL.Path) {
+			w.Header().Add("Content-Encoding", "gzip")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
